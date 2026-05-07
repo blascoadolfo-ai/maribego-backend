@@ -1,22 +1,22 @@
 const express = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const cors = require('cors');
- 
+
 const app = express();
 app.use(cors());
- 
+
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
- 
+
 app.get('/', (req, res) => {
   res.send('✅ Backend MARIBEGO funcionando correctamente');
 });
- 
+
 // ── Crear sesión de Stripe Checkout ─────────────────────────
 app.post('/crear-sesion', async (req, res) => {
   try {
     const { items, customer_email, metadata, success_url, cancel_url } = req.body;
- 
+
     const line_items = items.map(item => ({
       price_data: {
         currency: 'mxn',
@@ -25,7 +25,7 @@ app.post('/crear-sesion', async (req, res) => {
       },
       quantity: item.quantity,
     }));
- 
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items,
@@ -35,31 +35,31 @@ app.post('/crear-sesion', async (req, res) => {
       success_url,
       cancel_url,
     });
- 
+
     res.json({ url: session.url });
   } catch (error) {
     console.error('Error Stripe:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
- 
+
 // ── Webhook de Stripe ────────────────────────────────────────
 app.post('/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
- 
+
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Webhook error:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
- 
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const meta = session.metadata || {};
     const total = (session.amount_total / 100).toFixed(2);
- 
+
     // Build line items list from Stripe
     let lineItems = [];
     try {
@@ -72,9 +72,9 @@ app.post('/webhook', async (req, res) => {
     } catch(e) {
       console.error('Could not fetch line items:', e.message);
     }
- 
+
     const emailTo = meta.email || session.customer_email;
- 
+
     // Email al cliente
     if (emailTo) {
       await sendEmail({
@@ -83,7 +83,7 @@ app.post('/webhook', async (req, res) => {
         html: emailCliente({ ...meta, total, email: emailTo, lineItems }),
       });
     }
- 
+
     // Email a la manager
     await sendEmail({
       to: process.env.MANAGER_EMAIL || 'begoaran91@gmail.com',
@@ -91,10 +91,10 @@ app.post('/webhook', async (req, res) => {
       html: emailManager({ ...meta, total, email: emailTo, lineItems }),
     });
   }
- 
+
   res.json({ received: true });
 });
- 
+
 // ── Enviar email con Resend ──────────────────────────────────
 async function sendEmail({ to, subject, html }) {
   try {
@@ -117,11 +117,11 @@ async function sendEmail({ to, subject, html }) {
     console.error('Error email:', err.message);
   }
 }
- 
+
 // ── Template email CLIENTE ───────────────────────────────────
 function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, direccion, refs, items, notas, total, lineItems }) {
   const entregaLabel = tipo_entrega === 'tienda' ? 'Recoger en tienda' : 'Entrega a domicilio';
- 
+
   const itemsRows = lineItems && lineItems.length > 0
     ? lineItems.map((item, i) => `
       <tr style="border-top:1px solid #e1d5c9;${i % 2 === 0 ? '' : 'background:#fafafa'}">
@@ -129,7 +129,7 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
         <td style="padding:10px 16px;color:#3d2e26;font-size:13px;text-align:right;font-weight:600;">$${item.amount} MXN</td>
       </tr>`).join('')
     : `<tr><td colspan="2" style="padding:10px 16px;color:#9b8d81;font-size:13px;">${items || '—'}</td></tr>`;
- 
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
@@ -137,7 +137,7 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f2e8;padding:40px 20px;">
   <tr><td align="center">
     <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
- 
+
       <!-- Header -->
       <tr>
         <td style="background:#3d2e26;padding:32px 40px;text-align:center;">
@@ -145,7 +145,7 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
           <h1 style="margin:8px 0 0;color:#f9f2e8;font-size:28px;font-weight:400;letter-spacing:0.05em;">MARIBEGO</h1>
         </td>
       </tr>
- 
+
       <!-- Saludo -->
       <tr>
         <td style="padding:32px 40px 16px;">
@@ -155,7 +155,7 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
           </p>
         </td>
       </tr>
- 
+
       <!-- Productos -->
       <tr>
         <td style="padding:0 40px 8px;">
@@ -173,7 +173,7 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
           </table>
         </td>
       </tr>
- 
+
       <!-- Detalles de entrega -->
       <tr>
         <td style="padding:16px 40px 8px;">
@@ -204,7 +204,7 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
           </table>
         </td>
       </tr>
- 
+
       <!-- Recomendaciones -->
       <tr>
         <td style="padding:16px 40px 24px;">
@@ -219,15 +219,15 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
           </table>
         </td>
       </tr>
- 
+
       <!-- CTA WhatsApp -->
       <tr>
         <td style="padding:0 40px 32px;text-align:center;">
           <p style="margin:0 0 14px;color:#6b5c52;font-size:13px;">¿Tienes alguna pregunta? Escríbenos:</p>
-          <a href="https://wa.me/5215514743302" style="display:inline-block;background:#3d2e26;color:#f9f2e8;text-decoration:none;padding:12px 28px;border-radius:4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;font-family:'Montserrat',sans-serif;">Contactar por WhatsApp</a>
+          <a href="https://wa.link/dbe8nr" style="display:inline-block;background:#3d2e26;color:#f9f2e8;text-decoration:none;padding:12px 28px;border-radius:4px;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;font-family:'Montserrat',sans-serif;">Contactar por WhatsApp</a>
         </td>
       </tr>
- 
+
       <!-- Footer -->
       <tr>
         <td style="background:#f9f2e8;padding:18px 40px;text-align:center;border-top:1px solid #e1d5c9;">
@@ -237,18 +237,18 @@ function emailCliente({ orden_id, nombre, fecha_entrega, horario, tipo_entrega, 
           </p>
         </td>
       </tr>
- 
+
     </table>
   </td></tr>
 </table>
 </body>
 </html>`;
 }
- 
+
 // ── Template email MANAGER ───────────────────────────────────
 function emailManager({ orden_id, nombre, tel, email, fecha_entrega, horario, tipo_entrega, direccion, refs, items, notas, total, lineItems }) {
   const entregaLabel = tipo_entrega === 'tienda' ? '🏪 Recoger en tienda' : '🏠 Entrega a domicilio';
- 
+
   const itemsRows = lineItems && lineItems.length > 0
     ? lineItems.map(item => `
       <tr style="border-top:1px solid #e1d5c9;">
@@ -256,13 +256,13 @@ function emailManager({ orden_id, nombre, tel, email, fecha_entrega, horario, ti
         <td style="padding:8px 12px;color:#3d2e26;font-size:13px;text-align:right;font-weight:600;">$${item.amount} MXN</td>
       </tr>`).join('')
     : `<tr><td colspan="2" style="padding:8px 12px;color:#9b8d81;font-size:13px;">${items || '—'}</td></tr>`;
- 
+
   return `<!DOCTYPE html>
 <html lang="es">
 <head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:20px;background:#f9f2e8;font-family:Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;border:2px solid #f0ce99;">
- 
+
   <!-- Header -->
   <tr>
     <td style="background:#3d2e26;padding:20px 28px;">
@@ -270,7 +270,7 @@ function emailManager({ orden_id, nombre, tel, email, fecha_entrega, horario, ti
       <p style="margin:4px 0 0;color:#e1d5c9;font-size:12px;">Pago confirmado · ${new Date().toLocaleString('es-MX')}</p>
     </td>
   </tr>
- 
+
   <!-- Productos -->
   <tr>
     <td style="padding:20px 28px 8px;">
@@ -284,7 +284,7 @@ function emailManager({ orden_id, nombre, tel, email, fecha_entrega, horario, ti
       </table>
     </td>
   </tr>
- 
+
   <!-- Entrega -->
   <tr>
     <td style="padding:8px 28px;">
@@ -300,7 +300,7 @@ function emailManager({ orden_id, nombre, tel, email, fecha_entrega, horario, ti
       </table>
     </td>
   </tr>
- 
+
   <!-- Cliente -->
   <tr>
     <td style="padding:8px 28px 20px;">
@@ -312,18 +312,18 @@ function emailManager({ orden_id, nombre, tel, email, fecha_entrega, horario, ti
       </table>
     </td>
   </tr>
- 
+
   <!-- Footer -->
   <tr>
     <td style="background:#f9f2e8;padding:14px 28px;text-align:center;border-top:1px solid #e1d5c9;">
       <p style="margin:0;color:#9b8d81;font-size:11px;">Correo automático generado al confirmar el pago en Stripe.</p>
     </td>
   </tr>
- 
+
 </table>
 </body>
 </html>`;
 }
- 
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`MARIBEGO backend corriendo en puerto ${PORT}`));
